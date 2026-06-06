@@ -138,6 +138,29 @@ def display_len(s):
     return sum(char_width(c) for c in ANSI_RE.sub('', s))
 
 
+def clip(s, width):
+    """按显示宽度裁剪字符串，保留 ANSI 颜色码，超出部分用省略号代替。
+    保证表格值不会撑破右边框。"""
+    if display_len(s) <= width:
+        return s
+    out, used, has_ansi = [], 0, False
+    for m in re.finditer(r'(\033\[[0-9;]*m)|(.)', s):
+        if m.group(1):
+            out.append(m.group(1))
+            has_ansi = True
+            continue
+        ch = m.group(2)
+        w = char_width(ch)
+        if used + w > width - 1:        # 预留 1 格给省略号
+            break
+        out.append(ch)
+        used += w
+    out.append('…')
+    if has_ansi:
+        out.append(C.RESET)
+    return ''.join(out)
+
+
 def ok(v):   return f"{C.GREEN}{v}{C.RESET}"
 def warn(v): return f"{C.YELLOW}{v}{C.RESET}"
 def bad(v):  return f"{C.RED}{v}{C.RESET}"
@@ -160,7 +183,7 @@ def tbl_bot(): print(f"  ╚{'═'*(COL_LABEL+2)}╧{'═'*(COL_VALUE+2)}╝")
 
 
 def tbl_row(label, value):
-    value = str(value)
+    value = clip(str(value), COL_VALUE)
     lpad = ' ' * max(0, COL_LABEL - display_len(label))
     vpad = ' ' * max(0, COL_VALUE - display_len(value))
     lstr = f"{label}{lpad}" if label else ' ' * COL_LABEL
@@ -675,8 +698,7 @@ def main():
             elif dns_exit_consistent:
                 verdict = ok(f"一致 ✓（均为 {pub_country}）")
             else:
-                seen = "/".join(sorted({c for c in claude_cc if c})) or "未知"
-                verdict = warn(f"出口地 {seen} ≠ IP({pub_country})，留意")
+                verdict = warn(f"出口地与 IP({pub_country}) 不一致，留意")
             tbl_row("DNS 出口一致性", verdict)
 
     # AI 域名隧道探针（路由可达性，补充信号）
